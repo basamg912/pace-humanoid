@@ -16,7 +16,10 @@ parser.add_argument(
     "--num_envs", type=int, default=1, help="Number of environments to simulate."
 )
 parser.add_argument(
-    "--task", type=str, default="Unitree-G1-29dof-Velocity", help="Name of the task."
+    "--task",
+    type=str,
+    default="Isaac-Pace-Unitree-G1-29dof-v0",
+    help="Name of the task.",
 )
 parser.add_argument(
     "--min_frequency",
@@ -35,6 +38,9 @@ parser.add_argument(
     type=float,
     default=20.0,
     help="Duration of the chirp signal in seconds.",
+)
+parser.add_argument(
+    "--test", type=bool, default=False, help="for Testing, True save logs"
 )
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -60,6 +66,8 @@ from pace_sim2real.utils import project_root
 
 def main():
     # parse configuration
+    test = args_cli.test
+
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs
     )
@@ -80,6 +88,8 @@ def main():
         [articulation.joint_names.index(name) for name in joint_order],
         device=env.unwrapped.device,
     )
+    print(f"\n[INFO]: joint_order: {joint_order} \n")
+    print(f"[INFO]: joint_ids: {joint_ids}")
 
     armature = torch.tensor(
         [0.1] * len(joint_ids), device=env.unwrapped.device
@@ -90,7 +100,9 @@ def main():
     friction = torch.tensor(
         [0.05] * len(joint_ids), device=env.unwrapped.device
     ).unsqueeze(0)
-    bias = torch.tensor([0.05] * 12, device=env.unwrapped.device).unsqueeze(0)
+    bias = torch.tensor([0.01] * len(joint_ids), device=env.unwrapped.device).unsqueeze(
+        0
+    )
     time_lag = torch.tensor([[5]], dtype=torch.int, device=env.unwrapped.device)
     env.reset()
 
@@ -135,23 +147,155 @@ def main():
 
     trajectory = torch.zeros((num_steps, len(joint_ids)), device=env.unwrapped.device)
     trajectory[:, :] = chirp_signal.unsqueeze(-1)
+    # Per-joint chirp parameters for G1 29-DOF
+    # Joint order:
+    #  0: left_hip_pitch       1: left_hip_roll        2: left_hip_yaw
+    #  3: left_knee             4: left_ankle_pitch     5: left_ankle_roll
+
+    #  6: right_hip_pitch       7: right_hip_roll       8: right_hip_yaw
+    #  9: right_knee            10: right_ankle_pitch   11: right_ankle_roll
+
+    # 12: waist_yaw            13: waist_roll          14: waist_pitch
+
+    # 15: left_shoulder_pitch  16: left_shoulder_roll  17: left_shoulder_yaw
+    # 18: left_elbow           19: left_wrist_roll     20: left_wrist_pitch
+    # 21: left_wrist_yaw
+
+    # 22: right_shoulder_pitch 23: right_shoulder_roll 24: right_shoulder_yaw
+    # 25: right_elbow          26: right_wrist_roll    27: right_wrist_pitch
+    # 28: right_wrist_yaw
+
+    # joint order 기준 작성
     trajectory_directions = torch.tensor(
-        [1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+        [
+            # Left leg 1-6
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            # Right leg (roll mirrored) 7-12
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            # Waist 13-15
+            0.0,
+            0.0,
+            0.0,
+            # Left arm 16-22
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            # Right arm (roll mirrored) 23-28
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            -1.0,
+        ],
         device=env.unwrapped.device,
     )
-    trajectory_bias = torch.tensor([0.0, 0.4, 0.8] * 4, device=env.unwrapped.device)
-    trajectory_scale = torch.tensor([0.25, 0.5, -2.0] * 4, device=env.unwrapped.device)
-    trajectory[:, joint_ids] = (
-        (trajectory[:, joint_ids] + trajectory_bias.unsqueeze(0))
+    trajectory_bias = torch.tensor(
+        [
+            0.0
+            # Left leg: hip_pitch, hip_roll, hip_yaw, knee, ankle_pitch, ankle_roll
+            - 0.1,
+            0.0,
+            0.0,
+            0.3,
+            -0.2,
+            0.0,
+            # Right leg
+            -0.1,
+            0.0,
+            0.0,
+            0.3,
+            -0.2,
+            0.0,
+            # Waist: yaw, roll, pitch
+            0.0,
+            0.0,
+            0.0,
+            # Left arm: shoulder_pitch, shoulder_roll, shoulder_yaw, elbow, wrist_roll, wrist_pitch, wrist_yaw
+            0.3,
+            0.25,
+            0.0,
+            0.97,
+            0.15,
+            0.0,
+            0.0,
+            # Right arm
+            0.3,
+            -0.25,
+            0.0,
+            0.97,
+            -0.15,
+            0.0,
+            0.0,
+        ],
+        device=env.unwrapped.device,
+    )
+    trajectory_scale = torch.tensor(
+        [
+            # Left leg: large joints get bigger excitation, ankles smaller
+            0.3,
+            0.15,
+            0.2,
+            0.4,
+            0.15,
+            0.1,
+            # Right leg
+            0.3,
+            0.15,
+            0.2,
+            0.4,
+            0.15,
+            0.1,
+            # Waist: conservative
+            0.0,
+            0.0,
+            0.0,
+            # Left arm: shoulder bigger, wrist smaller
+            0.3,
+            0.2,
+            0.2,
+            0.3,
+            0.15,
+            0.1,
+            0.1,
+            # Right arm
+            0.3,
+            0.2,
+            0.2,
+            0.3,
+            0.15,
+            0.1,
+            0.1,
+        ],
+        device=env.unwrapped.device,
+    )
+    trajectory[:, :] = (
+        (trajectory[:, :] + trajectory_bias.unsqueeze(0))
         * trajectory_directions.unsqueeze(0)
         * trajectory_scale.unsqueeze(0)
     )
 
-    articulation.write_joint_position_to_sim(
-        trajectory[0, :].unsqueeze(0) + bias[0, joint_ids]
-    )
+    init_pos = torch.zeros((1, articulation.num_joints), device=env.unwrapped.device)
+    # joint ids 순서대로 init_pose 삽입 + joint bias
+    init_pos[0, joint_ids] = trajectory[0, :] + bias[0]
+    articulation.write_joint_position_to_sim(init_pos)
     articulation.write_joint_velocity_to_sim(
-        torch.zeros((1, len(joint_ids)), device=env.unwrapped.device)
+        torch.zeros((1, articulation.num_joints), device=env.unwrapped.device)
     )
 
     counter = 0
@@ -169,12 +313,11 @@ def main():
                 env.unwrapped.scene.articulations["robot"].data.joint_pos[0, joint_ids]
                 - bias[0]
             )
-            actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            actions = (
-                trajectory[counter % num_steps, :]
-                .unsqueeze(0)
-                .repeat(env.unwrapped.num_envs, 1)
+            actions = torch.zeros(
+                (env.unwrapped.num_envs, articulation.num_joints),
+                device=env.unwrapped.device,
             )
+            actions[:, joint_ids] = trajectory[counter % num_steps, :].unsqueeze(0)
             # apply actions
             obs, _, _, _, _ = env.step(actions)
             dof_target_pos_buffer[counter, :] = env.unwrapped.scene.articulations[
@@ -192,39 +335,39 @@ def main():
     from time import sleep
 
     sleep(1)  # wait a bit for everything to settle
-
-    (data_dir).mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "time": time_data.cpu(),
-            "dof_pos": dof_pos_buffer.cpu(),
-            "des_dof_pos": dof_target_pos_buffer.cpu(),
-        },
-        data_dir / "chirp_data.pt",
-    )
-
-    import matplotlib.pyplot as plt
-
-    for i in range(len(joint_ids)):
-        plt.figure()
-        plt.plot(
-            t.cpu().numpy(),
-            dof_pos_buffer[:, i].cpu().numpy(),
-            label=f"{joint_order[i]} pos",
+    if not test:
+        (data_dir).mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "time": time_data.cpu(),
+                "dof_pos": dof_pos_buffer.cpu(),
+                "des_dof_pos": dof_target_pos_buffer.cpu(),
+            },
+            data_dir / "chirp_data.pt",
         )
-        plt.plot(
-            t.cpu().numpy(),
-            dof_target_pos_buffer[:, i].cpu().numpy(),
-            label=f"{joint_order[i]} target",
-            linestyle="dashed",
-        )
-        plt.title(f"Joint {joint_order[i]} Trajectory")
-        plt.xlabel("Time [s]")
-        plt.ylabel("Joint position [rad]")
-        plt.grid()
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
+
+        import matplotlib.pyplot as plt
+
+        for i in range(len(joint_ids)):
+            plt.figure()
+            plt.plot(
+                t.cpu().numpy(),
+                dof_pos_buffer[:, i].cpu().numpy(),
+                label=f"{joint_order[i]} pos",
+            )
+            plt.plot(
+                t.cpu().numpy(),
+                dof_target_pos_buffer[:, i].cpu().numpy(),
+                label=f"{joint_order[i]} target",
+                linestyle="dashed",
+            )
+            plt.title(f"Joint {joint_order[i]} Trajectory")
+            plt.xlabel("Time [s]")
+            plt.ylabel("Joint position [rad]")
+            plt.grid()
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
 
 
 if __name__ == "__main__":
