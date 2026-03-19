@@ -211,7 +211,9 @@ class G1PaceCfg(PaceCfg):
 class G1PaceSceneCfg(PaceSim2realSceneCfg):
     robot = UNITREE_G1_29DOF_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
-        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 1.8)),
+        init_state=ArticulationCfg.InitialStateCfg(
+            pos=(0.0, 0.0, 1.0)
+            ),
         actuators={
             "N7520-14.3": G1_PACE_ACTUATOR1_CFG,
             "N7520-22.5": G1_PACE_ACTUATOR2_CFG,

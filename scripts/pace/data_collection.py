@@ -100,7 +100,9 @@ def main():
     friction = torch.tensor(
         [0.05] * len(joint_ids), device=env.unwrapped.device
     ).unsqueeze(0)
-    bias = torch.tensor([0.01] * len(joint_ids), device=env.unwrapped.device).unsqueeze(
+
+    # joint bias (initial pose 에 영향)
+    bias = torch.tensor([0.00] * len(joint_ids), device=env.unwrapped.device).unsqueeze(
         0
     )
     time_lag = torch.tensor([[5]], dtype=torch.int, device=env.unwrapped.device)
@@ -198,16 +200,15 @@ def main():
             1.0,
             -1.0,
             -1.0,
-            -1.0,
-            -1.0,
             1.0,
-            -1.0,
+            1.0,
+            1.0,
+            1.0,
         ],
         device=env.unwrapped.device,
     )
     trajectory_bias = torch.tensor(
         [
-            0.0
             # Left leg: hip_pitch, hip_roll, hip_yaw, knee, ankle_pitch, ankle_roll
             - 0.1,
             0.0,
@@ -236,54 +237,49 @@ def main():
             0.0,
             # Right arm
             0.3,
-            -0.25,
+            0.25,
             0.0,
             0.97,
-            -0.15,
+            0.15,
             0.0,
             0.0,
         ],
         device=env.unwrapped.device,
     )
+    disable_legs = True
+    if disable_legs:
+        left_leg = [0.0]*6
+        right_leg = [0.0]*6
+    else:
+        left_leg = [0.3, 0.15, 0.2, 0.4, 0.15, 0.1]
+        right_leg = [0.3, 0.15, 0.2, 0.4, 0.15, 0.1]
     trajectory_scale = torch.tensor(
-        [
             # Left leg: large joints get bigger excitation, ankles smaller
-            0.3,
-            0.15,
-            0.2,
-            0.4,
-            0.15,
-            0.1,
+            left_leg+
             # Right leg
-            0.3,
-            0.15,
-            0.2,
-            0.4,
-            0.15,
-            0.1,
+            right_leg+
             # Waist: conservative
-            0.0,
-            0.0,
-            0.0,
+            [0.0, 0.0, 0.0]+
             # Left arm: shoulder bigger, wrist smaller
-            0.3,
+            [0.3,
             0.2,
             0.2,
             0.3,
             0.15,
             0.1,
-            0.1,
+            0.1]+
             # Right arm
-            0.3,
+            [0.3,
             0.2,
             0.2,
             0.3,
             0.15,
             0.1,
-            0.1,
-        ],
+            0.1],
         device=env.unwrapped.device,
     )
+    #              초기 위치 용도 (joint limit 고려)        sin wave amplitude
+    # trajectory = (trajectory + trajectory_bias) * trajectory_scale
     trajectory[:, :] = (
         (trajectory[:, :] + trajectory_bias.unsqueeze(0))
         * trajectory_directions.unsqueeze(0)
