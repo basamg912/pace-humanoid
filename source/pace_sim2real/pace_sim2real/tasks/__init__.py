@@ -10,6 +10,7 @@
 ##
 
 from isaaclab_tasks.utils import import_packages
+import unitree_rl_lab.tasks
 
 # The blacklist is used to prevent importing configs from sub-packages
 _BLACKLIST_PKGS = ["utils", ".mdp"]
