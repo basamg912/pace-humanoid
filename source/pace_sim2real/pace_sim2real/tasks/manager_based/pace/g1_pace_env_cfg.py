@@ -55,9 +55,10 @@ G1_PACE_ACTUATOR2_CFG = PaceDCMotorCfg(
 # 6 + 2 + 2 + 4 + 2 = 16
 G1_PACE_ACTUATOR3_CFG = PaceDCMotorCfg(
     joint_names_expr=[
-        ".*_shoulder_.*",
-        ".*_elbow_.*",
-        ".*_wrist_roll.*",
+        # # 3/20 팔 제거
+        # ".*_shoulder_.*",
+        # ".*_elbow_.*",
+        # ".*_wrist_roll.*",
         ".*_ankle_.*",
         "waist_roll_joint",
         "waist_pitch_joint",
@@ -66,30 +67,32 @@ G1_PACE_ACTUATOR3_CFG = PaceDCMotorCfg(
     velocity_limit=37,
     stiffness=40.0,
     damping={
-        ".*_shoulder_.*": 1.0,
-        ".*_elbow_.*": 1.0,
-        ".*_wrist_roll.*": 1.0,
+        # # 3/20 팔 제거
+        # ".*_shoulder_.*": 1.0,
+        # ".*_elbow_.*": 1.0,
+        # ".*_wrist_roll.*": 1.0,
         ".*_ankle_.*": 2.0,
         "waist_.*_joint": 5.0,
     },
     armature=0.01,
     saturation_effort=30,
-    encoder_bias=[0.0] * 16,
+    encoder_bias=[0.0] * 6,
     max_delay=10,
 )
 # w4010-25
 # 4
-G1_PACE_ACTUATOR4_CFG = PaceDCMotorCfg(
-    joint_names_expr=[".*_wrist_pitch.*", ".*_wrist_yaw.*"],
-    effort_limit=5,
-    velocity_limit=22,
-    stiffness=40.0,
-    damping=1.0,
-    armature=0.01,
-    saturation_effort=6,
-    encoder_bias=[0.0] * 4,
-    max_delay=10,
-)
+# # 3.20 팔 제거
+# G1_PACE_ACTUATOR4_CFG = PaceDCMotorCfg(
+#     joint_names_expr=[".*_wrist_pitch.*", ".*_wrist_yaw.*"],
+#     effort_limit=5,
+#     velocity_limit=22,
+#     stiffness=40.0,
+#     damping=1.0,
+#     armature=0.01,
+#     saturation_effort=6,
+#     encoder_bias=[0.0] * 4,
+#     max_delay=10,
+# )
 
 
 @configclass
@@ -159,7 +162,7 @@ class UnitreeUrdfFileCfg(sim_utils.UrdfFileCfg):
 @configclass
 class G1PaceCfg(PaceCfg):
     robot_name = "Robot"
-    data_dir = "G1/chirp_data.pt"
+    data_dir = "Robot/chirp_data.pt"
     bounds_params: torch.Tensor = torch.zeros(
         # 29 x 4 + 1 = 117
         (117, 2)
@@ -180,30 +183,31 @@ class G1PaceCfg(PaceCfg):
         "waist_yaw_joint",
         "waist_roll_joint",
         "waist_pitch_joint",
-        "left_shoulder_pitch_joint",
-        "left_shoulder_roll_joint",
-        "left_shoulder_yaw_joint",
-        "left_elbow_joint",
-        "left_wrist_roll_joint",
-        "left_wrist_pitch_joint",
-        "left_wrist_yaw_joint",
-        "right_shoulder_pitch_joint",
-        "right_shoulder_roll_joint",
-        "right_shoulder_yaw_joint",
-        "right_elbow_joint",
-        "right_wrist_roll_joint",
-        "right_wrist_pitch_joint",
-        "right_wrist_yaw_joint",
+        # # 3/20 팔 제거
+        # "left_shoulder_pitch_joint",
+        # "left_shoulder_roll_joint",
+        # "left_shoulder_yaw_joint",
+        # "left_elbow_joint",
+        # "left_wrist_roll_joint",
+        # "left_wrist_pitch_joint",
+        # "left_wrist_yaw_joint",
+        # "right_shoulder_pitch_joint",
+        # "right_shoulder_roll_joint",
+        # "right_shoulder_yaw_joint",
+        # "right_elbow_joint",
+        # "right_wrist_roll_joint",
+        # "right_wrist_pitch_joint",
+        # "right_wrist_yaw_joint",
     ]
 
     def __post_init__(self):
         # set bounds for parameters
-        self.bounds_params[:29, 0] = 1e-5
-        self.bounds_params[:29, 1] = 1.0  # armature between 1e-5 - 1.0 [kgm2]
-        self.bounds_params[29:58, 1] = 7.0  # dof_damping between 0.0 - 7.0 [Nm s/rad]
-        self.bounds_params[58:87, 1] = 0.5  # friction between 0.0 - 0.5
-        self.bounds_params[87:116, 0] = -0.1
-        self.bounds_params[87:116, 1] = 0.1  # bias between -0.1 - 0.1 [rad]
+        self.bounds_params[:15, 0] = 1e-5
+        self.bounds_params[:15, 1] = 1.0  # armature between 1e-5 - 1.0 [kgm2]
+        self.bounds_params[15:30, 1] = 7.0  # dof_damping between 0.0 - 7.0 [Nm s/rad]
+        self.bounds_params[30:45, 1] = 0.5  # friction between 0.0 - 0.5
+        self.bounds_params[45:60, 0] = -0.1
+        self.bounds_params[45:60, 1] = 0.1  # bias between -0.1 - 0.1 [rad]
         self.bounds_params[116, 1] = 10.0  # delay between 0.0 - 10.0 [sim steps]
 
 
@@ -211,14 +215,13 @@ class G1PaceCfg(PaceCfg):
 class G1PaceSceneCfg(PaceSim2realSceneCfg):
     robot = UNITREE_G1_29DOF_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
-        init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 1.0)
-            ),
+        init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 1.0)),
         actuators={
             "N7520-14.3": G1_PACE_ACTUATOR1_CFG,
             "N7520-22.5": G1_PACE_ACTUATOR2_CFG,
             "N5020-16": G1_PACE_ACTUATOR3_CFG,
-            "W4010-25": G1_PACE_ACTUATOR4_CFG,
+            # # 3/20 팔 제거 사용 안함
+            # "W4010-25": G1_PACE_ACTUATOR4_CFG,
         },
     )
 

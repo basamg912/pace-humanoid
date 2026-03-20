@@ -42,6 +42,14 @@ parser.add_argument(
 parser.add_argument(
     "--test", type=bool, default=False, help="for Testing, True save logs"
 )
+parser.add_argument(
+    "--joints",
+    type=str,
+    nargs="+",
+    default=["left_arm", "right_arm"],
+    choices=["left_leg", "right_leg", "waist", "left_arm", "right_arm"],
+    help="Joint groups to excite and collect data for.",
+)
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -178,114 +186,93 @@ def main():
             1.0,
             1.0,
             # Right leg (roll mirrored) 7-12
+            1.0,
             -1.0,
             -1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            -1.0,
+            1.0,
+            1.0,
+            1.0,
             # Waist 13-15
             0.0,
             0.0,
             0.0,
-            # Left arm 16-22
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            # Right arm (roll mirrored) 23-28
-            1.0,
-            -1.0,
-            -1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
+            # # 3/20 팔 제거
+            # # Left arm 16-22
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # # Right arm (roll mirrored) 23-28
+            # 1.0,
+            # -1.0,
+            # -1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
         ],
         device=env.unwrapped.device,
     )
+    tb_leftleg = [-0.1, 0.0, 0.0, 0.3, -0.2, 0.0]
+    tb_rightleg = [-0.1, 0.0, 0.0, 0.3, -0.2, 0.0]
+    tb_waist = [0.0, 0.0, 0.0]
+    tb_leftarm = [0.3, 0.25, 0.0, 0.97, 0.15, 0.0, 0.0]
+    tb_rightarm = [0.3, 0.25, 0.0, 0.97, 0.15, 0.0, 0.0]
     trajectory_bias = torch.tensor(
-        [
-            # Left leg: hip_pitch, hip_roll, hip_yaw, knee, ankle_pitch, ankle_roll
-            - 0.1,
-            0.0,
-            0.0,
-            0.3,
-            -0.2,
-            0.0,
-            # Right leg
-            -0.1,
-            0.0,
-            0.0,
-            0.3,
-            -0.2,
-            0.0,
-            # Waist: yaw, roll, pitch
-            0.0,
-            0.0,
-            0.0,
-            # Left arm: shoulder_pitch, shoulder_roll, shoulder_yaw, elbow, wrist_roll, wrist_pitch, wrist_yaw
-            0.3,
-            0.25,
-            0.0,
-            0.97,
-            0.15,
-            0.0,
-            0.0,
-            # Right arm
-            0.3,
-            0.25,
-            0.0,
-            0.97,
-            0.15,
-            0.0,
-            0.0,
-        ],
+        tb_leftleg + tb_rightleg + tb_waist
+        # # 3/20 팔 제거
+        # + tb_leftarm + tb_rightarm
+        ,
         device=env.unwrapped.device,
     )
-    disable_legs = True
-    if disable_legs:
-        left_leg = [0.0]*6
-        right_leg = [0.0]*6
-    else:
-        left_leg = [0.3, 0.15, 0.2, 0.4, 0.15, 0.1]
-        right_leg = [0.3, 0.15, 0.2, 0.4, 0.15, 0.1]
+    enabled_groups = args_cli.joints
+    # Per-group trajectory scales (non-zero = excited)
+    scale_left_leg = (
+        [0.3, 0.15, 0.2, 0.4, 0.15, 0.1] if "left_leg" in enabled_groups else [0.0] * 6
+    )
+    scale_right_leg = (
+        [0.3, 0.15, 0.2, 0.4, 0.15, 0.1] if "right_leg" in enabled_groups else [0.0] * 6
+    )
+    scale_waist = [0.3, 0.2, 0.3] if "waist" in enabled_groups else [0.0] * 3
+    scale_left_arm = (
+        [0.8, 0.1, 0.5, 0.5, 0.15, 0.1, 0.1]
+        if "left_arm" in enabled_groups
+        else [0.0] * 7
+    )
+    scale_right_arm = (
+        [0.8, 0.1, 0.5, 0.5, 0.15, 0.1, 0.1]
+        if "right_arm" in enabled_groups
+        else [0.0] * 7
+    )
     trajectory_scale = torch.tensor(
-            # Left leg: large joints get bigger excitation, ankles smaller
-            left_leg+
-            # Right leg
-            right_leg+
-            # Waist: conservative
-            [0.0, 0.0, 0.0]+
-            # Left arm: shoulder bigger, wrist smaller
-            [0.3,
-            0.2,
-            0.2,
-            0.3,
-            0.15,
-            0.1,
-            0.1]+
-            # Right arm
-            [0.3,
-            0.2,
-            0.2,
-            0.3,
-            0.15,
-            0.1,
-            0.1],
+        scale_left_leg + scale_right_leg + scale_waist
+        # # 3/20 팔 제거
+        # + scale_left_arm
+        # + scale_right_arm
+        ,
         device=env.unwrapped.device,
     )
+    # Mask for which joints are active (scale > 0) — used to filter saved data
+    active_mask = trajectory_scale > 0
+    active_indices = torch.where(active_mask)[0]
+    active_joint_names = [joint_order[i] for i in active_indices.tolist()]
+    print(f"[INFO]: Active joint groups: {enabled_groups}")
+    print(f"[INFO]: Active joints: {active_joint_names}")
     #              초기 위치 용도 (joint limit 고려)        sin wave amplitude
     # trajectory = (trajectory + trajectory_bias) * trajectory_scale
+
+    # # 관절의 초기 위치 (sin 파의 중심)을 0으로 설정 -> 하드웨어 안전을 위해 주석처리
+    # trajectory_bias = torch.zeros_like(trajectory_bias)
+    # trajectory_scale = torch.ones_like(trajectory_scale)
+
     trajectory[:, :] = (
         (trajectory[:, :] + trajectory_bias.unsqueeze(0))
         * trajectory_directions.unsqueeze(0)
         * trajectory_scale.unsqueeze(0)
     )
-
     init_pos = torch.zeros((1, articulation.num_joints), device=env.unwrapped.device)
     # joint ids 순서대로 init_pose 삽입 + joint bias
     init_pos[0, joint_ids] = trajectory[0, :] + bias[0]
@@ -333,18 +320,20 @@ def main():
     sleep(1)  # wait a bit for everything to settle
     if not test:
         (data_dir).mkdir(parents=True, exist_ok=True)
+        # Save only active joints
         torch.save(
             {
                 "time": time_data.cpu(),
-                "dof_pos": dof_pos_buffer.cpu(),
-                "des_dof_pos": dof_target_pos_buffer.cpu(),
+                "dof_pos": dof_pos_buffer[:, active_indices].cpu(),
+                "des_dof_pos": dof_target_pos_buffer[:, active_indices].cpu(),
+                "joint_names": active_joint_names,
             },
             data_dir / "chirp_data.pt",
         )
 
         import matplotlib.pyplot as plt
 
-        for i in range(len(joint_ids)):
+        for idx, i in enumerate(active_indices.tolist()):
             plt.figure()
             plt.plot(
                 t.cpu().numpy(),

@@ -63,6 +63,32 @@ def main():
     target_dof_pos = data["des_dof_pos"].to(env.unwrapped.device)
     measured_dof_pos = data["dof_pos"].to(env.unwrapped.device)
 
+    # Use joint_names from data file if available (subset of joints),
+    # otherwise fall back to full joint_order from config
+    data_joint_names = data.get("joint_names", joint_order)
+    # Map data columns to simulator joint indices
+    data_joint_ids = torch.tensor(
+        [articulation.joint_names.index(name) for name in data_joint_names],
+        device=env.unwrapped.device,
+    )
+    # Filter bounds_params to only the collected joints
+    # bounds_params shape: (num_joints*4 + 1, 2) — armature, damping, friction, bias (each num_joints rows), then 1 delay row
+    data_joint_order_indices = torch.tensor(
+        [joint_order.index(name) for name in data_joint_names],
+        device=env.unwrapped.device,
+    )
+    num_all_joints = len(joint_order)
+    param_indices = []
+    for group in range(4):  # armature, damping, friction, bias
+        param_indices.append(group * num_all_joints + data_joint_order_indices)
+    # append delay (last row)
+    param_indices.append(torch.tensor([4 * num_all_joints], device=env.unwrapped.device))
+    param_indices = torch.cat(param_indices)
+    bounds_params = bounds_params[param_indices, :]
+
+    print(f"[INFO]: Fitting joints: {data_joint_names}")
+    print(f"[INFO]: Data joint IDs (sim): {data_joint_ids}")
+
     initial_dof_pos = measured_dof_pos[0, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1)
 
     time_steps = time_data.shape[0]
@@ -72,7 +98,7 @@ def main():
         bounds=bounds_params,
         population_size=env.unwrapped.num_envs,
         log_dir=log_dir,
-        joint_order=joint_order,
+        joint_order=data_joint_names,
         max_iteration=env_cfg.sim2real.cmaes.max_iteration,
         data=data,
         device=env.unwrapped.device,
@@ -83,17 +109,17 @@ def main():
     )
 
     env.reset()
-    opt.update_simulator(articulation, sim_joint_ids, initial_dof_pos)
+    opt.update_simulator(articulation, data_joint_ids, initial_dof_pos)
 
     counter = 0
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
-            # compute zero actions
-            opt.tell(env.unwrapped.scene.articulations["robot"].data.joint_pos[:, sim_joint_ids], measured_dof_pos[counter, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1))
+            # compute zero actions — compare only collected joints
+            opt.tell(env.unwrapped.scene.articulations["robot"].data.joint_pos[:, data_joint_ids], measured_dof_pos[counter, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1))
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            actions[:, sim_joint_ids] = target_dof_pos[counter, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1)
+            actions[:, data_joint_ids] = target_dof_pos[counter, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1)
             # apply actions
             env.step(actions)
             counter += 1
@@ -106,7 +132,7 @@ def main():
                 if opt.finished():
                     break
                 env.reset()
-                opt.update_simulator(env.unwrapped.scene["robot"], sim_joint_ids, initial_dof_pos)
+                opt.update_simulator(env.unwrapped.scene["robot"], data_joint_ids, initial_dof_pos)
     # close optimizer
     opt.close()
     # close the simulator
