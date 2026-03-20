@@ -12,8 +12,15 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Pace agent for Isaac Lab environments.")
-parser.add_argument("--num_envs", type=int, default=4096, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default="Isaac-Pace-Unitree-G1-29dof-v0", help="Name of the task.")
+parser.add_argument(
+    "--num_envs", type=int, default=4096, help="Number of environments to simulate."
+)
+parser.add_argument(
+    "--task",
+    type=str,
+    default="Isaac-Pace-Unitree-G1-29dof-v0",
+    help="Name of the task.",
+)
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -53,7 +60,10 @@ def main():
     bounds_params = env_cfg.sim2real.bounds_params.to(env.unwrapped.device)
     articulation = env.unwrapped.scene["robot"]
     joint_order = env_cfg.sim2real.joint_order
-    sim_joint_ids = torch.tensor([articulation.joint_names.index(name) for name in joint_order], device=env.unwrapped.device)
+    sim_joint_ids = torch.tensor(
+        [articulation.joint_names.index(name) for name in joint_order],
+        device=env.unwrapped.device,
+    )
 
     data_file = project_root() / "data" / env_cfg.sim2real.data_dir
     log_dir = project_root() / "logs" / "pace" / env_cfg.sim2real.robot_name
@@ -82,14 +92,39 @@ def main():
     for group in range(4):  # armature, damping, friction, bias
         param_indices.append(group * num_all_joints + data_joint_order_indices)
     # append delay (last row)
-    param_indices.append(torch.tensor([4 * num_all_joints], device=env.unwrapped.device))
+    param_indices.append(
+        torch.tensor([4 * num_all_joints], device=env.unwrapped.device)
+    )
     param_indices = torch.cat(param_indices)
     bounds_params = bounds_params[param_indices, :]
 
-    print(f"[INFO]: Fitting joints: {data_joint_names}")
+    env.reset()
+    nominal_armature = articulation.data.default_joint_armature[
+        0, data_joint_ids
+    ]  # articulation = env.unwrapped.scene["robot"]
+    nominal_damping = articulation.data.default_joint_damping[0, data_joint_ids]
+    nominal_friction = articulation.data.default_joint_friction[0, data_joint_ids]
+    nominal_bias = articulation.data.default_joint_bias[0, data_joint_ids]
+    nominal_delay = articulation.data.default_joint_delay[0]
+    nominal_params = torch.cat(
+        [
+            nominal_armature,
+            nominal_damping,
+            nominal_friction,
+            nominal_bias,
+            nominal_delay,
+        ]
+    )
+    print(f"[INFO]: Nominal Armature: {nominal_armature}")
+    print(f"[INFO]: Nominal Damping: {nominal_damping}")
+    print(f"[INFO]: Nominal Friction: {nominal_friction}")
+    print(f"[INFO]: Nominal Bias: {nominal_bias}")
+    print(f"[INFO]: Nominal Delay: {nominal_delay}")
     print(f"[INFO]: Data joint IDs (sim): {data_joint_ids}")
 
-    initial_dof_pos = measured_dof_pos[0, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1)
+    initial_dof_pos = (
+        measured_dof_pos[0, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1)
+    )
 
     time_steps = time_data.shape[0]
     sim_dt = env.unwrapped.sim.cfg.dt
@@ -106,6 +141,8 @@ def main():
         sigma=env_cfg.sim2real.cmaes.sigma,
         save_interval=env_cfg.sim2real.cmaes.save_interval,
         save_optimization_process=env_cfg.sim2real.cmaes.save_optimization_process,
+        nominal_params=nominal_params,
+        nominal_weight=0.01,
     )
 
     env.reset()
@@ -117,14 +154,27 @@ def main():
         # run everything in inference mode
         with torch.inference_mode():
             # compute zero actions — compare only collected joints
-            opt.tell(env.unwrapped.scene.articulations["robot"].data.joint_pos[:, data_joint_ids], measured_dof_pos[counter, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1))
+            opt.tell(
+                env.unwrapped.scene.articulations["robot"].data.joint_pos[
+                    :, data_joint_ids
+                ],
+                measured_dof_pos[counter, :]
+                .unsqueeze(0)
+                .repeat(env.unwrapped.num_envs, 1),
+            )
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            actions[:, data_joint_ids] = target_dof_pos[counter, :].unsqueeze(0).repeat(env.unwrapped.num_envs, 1)
+            actions[:, data_joint_ids] = (
+                target_dof_pos[counter, :]
+                .unsqueeze(0)
+                .repeat(env.unwrapped.num_envs, 1)
+            )
             # apply actions
             env.step(actions)
             counter += 1
             if counter % 400 == 0:
-                print(f"[INFO]: Step {counter * sim_dt:.1f} / {time_data[-1]:.1f} seconds ({counter / time_steps * 100:.1f} %)")
+                print(
+                    f"[INFO]: Step {counter * sim_dt:.1f} / {time_data[-1]:.1f} seconds ({counter / time_steps * 100:.1f} %)"
+                )
             if counter >= time_steps:
                 print("[INFO]: Reached the end of the trajectory, exiting.")
                 counter = 0
@@ -132,7 +182,9 @@ def main():
                 if opt.finished():
                     break
                 env.reset()
-                opt.update_simulator(env.unwrapped.scene["robot"], data_joint_ids, initial_dof_pos)
+                opt.update_simulator(
+                    env.unwrapped.scene["robot"], data_joint_ids, initial_dof_pos
+                )
     # close optimizer
     opt.close()
     # close the simulator
