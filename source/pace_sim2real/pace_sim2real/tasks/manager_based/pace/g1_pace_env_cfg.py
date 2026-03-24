@@ -3,7 +3,7 @@ import os
 import isaaclab.sim as sim_utils
 from pace_sim2real.utils import PaceDCMotorCfg
 from pace_sim2real import PaceSim2realEnvCfg, PaceSim2realSceneCfg, PaceCfg
-from unitree_rl_lab.assets.robots.unitree import UNITREE_G1_29DOF_CFG
+from pace_sim2real.tasks.manager_based.pace.G1_CFG import UNITREE_G1_29DOF_CFG
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils import configclass
 
@@ -56,9 +56,9 @@ G1_PACE_ACTUATOR2_CFG = PaceDCMotorCfg(
 G1_PACE_ACTUATOR3_CFG = PaceDCMotorCfg(
     joint_names_expr=[
         # # 3/20 팔 제거
-        # ".*_shoulder_.*",
-        # ".*_elbow_.*",
-        # ".*_wrist_roll.*",
+        ".*_shoulder_.*",
+        ".*_elbow_.*",
+        ".*_wrist_roll.*",
         ".*_ankle_.*",
         "waist_roll_joint",
         "waist_pitch_joint",
@@ -68,31 +68,31 @@ G1_PACE_ACTUATOR3_CFG = PaceDCMotorCfg(
     stiffness=40.0,
     damping={
         # # 3/20 팔 제거
-        # ".*_shoulder_.*": 1.0,
-        # ".*_elbow_.*": 1.0,
-        # ".*_wrist_roll.*": 1.0,
+        ".*_shoulder_.*": 1.0,
+        ".*_elbow_.*": 1.0,
+        ".*_wrist_roll.*": 1.0,
         ".*_ankle_.*": 2.0,
         "waist_.*_joint": 5.0,
     },
     armature=0.01,
     saturation_effort=30,
-    encoder_bias=[0.0] * 6,
+    encoder_bias=[0.0] * 16,
     max_delay=10,
 )
 # w4010-25
 # 4
 # # 3.20 팔 제거
-# G1_PACE_ACTUATOR4_CFG = PaceDCMotorCfg(
-#     joint_names_expr=[".*_wrist_pitch.*", ".*_wrist_yaw.*"],
-#     effort_limit=5,
-#     velocity_limit=22,
-#     stiffness=40.0,
-#     damping=1.0,
-#     armature=0.01,
-#     saturation_effort=6,
-#     encoder_bias=[0.0] * 4,
-#     max_delay=10,
-# )
+G1_PACE_ACTUATOR4_CFG = PaceDCMotorCfg(
+    joint_names_expr=[".*_wrist_pitch.*", ".*_wrist_yaw.*"],
+    effort_limit=5,
+    velocity_limit=22,
+    stiffness=40.0,
+    damping=1.0,
+    armature=0.01,
+    saturation_effort=6,
+    encoder_bias=[0.0] * 4,
+    max_delay=10,
+)
 
 
 @configclass
@@ -184,20 +184,20 @@ class G1PaceCfg(PaceCfg):
         "waist_roll_joint",
         "waist_pitch_joint",
         # # 3/20 팔 제거
-        # "left_shoulder_pitch_joint",
-        # "left_shoulder_roll_joint",
-        # "left_shoulder_yaw_joint",
-        # "left_elbow_joint",
-        # "left_wrist_roll_joint",
-        # "left_wrist_pitch_joint",
-        # "left_wrist_yaw_joint",
-        # "right_shoulder_pitch_joint",
-        # "right_shoulder_roll_joint",
-        # "right_shoulder_yaw_joint",
-        # "right_elbow_joint",
-        # "right_wrist_roll_joint",
-        # "right_wrist_pitch_joint",
-        # "right_wrist_yaw_joint",
+        "left_shoulder_pitch_joint",
+        "left_shoulder_roll_joint",
+        "left_shoulder_yaw_joint",
+        "left_elbow_joint",
+        "left_wrist_roll_joint",
+        "left_wrist_pitch_joint",
+        "left_wrist_yaw_joint",
+        "right_shoulder_pitch_joint",
+        "right_shoulder_roll_joint",
+        "right_shoulder_yaw_joint",
+        "right_elbow_joint",
+        "right_wrist_roll_joint",
+        "right_wrist_pitch_joint",
+        "right_wrist_yaw_joint",
     ]
 
     def __post_init__(self):
@@ -221,7 +221,7 @@ class G1PaceSceneCfg(PaceSim2realSceneCfg):
             "N7520-22.5": G1_PACE_ACTUATOR2_CFG,
             "N5020-16": G1_PACE_ACTUATOR3_CFG,
             # # 3/20 팔 제거 사용 안함
-            # "W4010-25": G1_PACE_ACTUATOR4_CFG,
+            "W4010-25": G1_PACE_ACTUATOR4_CFG,
         },
     )
 

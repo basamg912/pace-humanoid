@@ -1,7 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 
-data = torch.load("data/G1/chirp_data.pt")  # adjust path to your actual file
+data = torch.load("data/Robot/chirp_data.pt")  # adjust path to your actual file
 
 time = data["time"].numpy()
 dof_pos = data["dof_pos"].numpy()

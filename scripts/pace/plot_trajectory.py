@@ -11,11 +11,23 @@ import argparse
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Pace agent for Isaac Lab environments.")
-parser.add_argument("--folder_name", type=str, default=None, help="Name of the folder to use.")
-parser.add_argument("--mean_name", type=str, default=None, help="Name of the parameters file to use.")
-parser.add_argument("--robot_name", type=str, default="anymal_d_sim", help="Name of the robot.")
-parser.add_argument("--plot_trajectory", action="store_true", help="Whether to plot the trajectory.")
-parser.add_argument("--plot_score", action="store_true", help="Whether to plot the score over iterations.")
+parser.add_argument(
+    "--folder_name", type=str, default=None, help="Name of the folder to use."
+)
+parser.add_argument(
+    "--mean_name", type=str, default=None, help="Name of the parameters file to use."
+)
+parser.add_argument(
+    "--robot_name", type=str, default="Robot", help="Name of the robot."
+)
+parser.add_argument(
+    "--plot_trajectory", action="store_true", help="Whether to plot the trajectory."
+)
+parser.add_argument(
+    "--plot_score",
+    action="store_true",
+    help="Whether to plot the score over iterations.",
+)
 
 args = parser.parse_args()
 folder_name = args.folder_name
@@ -86,7 +98,7 @@ print(f"Viscous friction params: {mean[len(joint_order):2 * len(joint_order)]}")
 print(f"Static friction params: {mean[2 * len(joint_order):3 * len(joint_order)]}")
 print(f"Encoder bias params: {mean[3 * len(joint_order):4 * len(joint_order)]}")
 print(f"Delay param: {mean[-1].item()}")
-encoder_bias = mean[3 * len(joint_order):4 * len(joint_order)]  # extract encoder bias
+encoder_bias = mean[3 * len(joint_order) : 4 * len(joint_order)]  # extract encoder bias
 
 if plot_score:
     try:
@@ -102,7 +114,11 @@ if plot_score:
     plt.title("CMA-ES Score over Iterations")
     plt.xlabel("Iteration")
     plt.ylabel("Score")
-    data = torch.min(progress["scores_buffer"][:params_num + 1], dim=1).values.cpu().numpy()
+    data = (
+        torch.min(progress["scores_buffer"][: params_num + 1], dim=1)
+        .values.cpu()
+        .numpy()
+    )
     plt.semilogy(data)
     plt.xlim(0, params_num)
     # plt.ylim(0, None)
@@ -112,9 +128,29 @@ if plot_score:
 if plot_trajectory:
     for i in range(len(joint_order)):
         plt.figure(figsize=(8, 4.5))
-        plt.plot(time, trajectories[:, i].cpu().numpy() - encoder_bias[i].item(), c="tab:orange", label="Sim", linewidth=2)  # in encoder frame
-        plt.plot(time, real_trajectories[:, i].cpu().numpy(), label="Real", c="tab:green", linestyle="--", linewidth=2)
-        plt.plot(time, target_trajectories[:, i].cpu().numpy(), c="grey", label="Target", linestyle="--", alpha=0.5)
+        plt.plot(
+            time,
+            trajectories[:, i].cpu().numpy() - encoder_bias[i].item(),
+            c="tab:orange",
+            label="Sim",
+            linewidth=2,
+        )  # in encoder frame
+        plt.plot(
+            time,
+            real_trajectories[:, i].cpu().numpy(),
+            label="Real",
+            c="tab:green",
+            linestyle="--",
+            linewidth=2,
+        )
+        plt.plot(
+            time,
+            target_trajectories[:, i].cpu().numpy(),
+            c="grey",
+            label="Target",
+            linestyle="--",
+            alpha=0.5,
+        )
         plt.title(f"Joint {joint_order[i]}")  # Use joint names from config
         plt.xlabel("Time [s]")
         plt.ylabel("Joint position [rad]")

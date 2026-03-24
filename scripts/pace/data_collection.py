@@ -46,7 +46,7 @@ parser.add_argument(
     "--joints",
     type=str,
     nargs="+",
-    default=["left_arm", "right_arm"],
+    default=["left_leg", "right_leg", "left_arm", "right_arm"],
     choices=["left_leg", "right_leg", "waist", "left_arm", "right_arm"],
     help="Joint groups to excite and collect data for.",
 )
@@ -99,18 +99,23 @@ def main():
     print(f"\n[INFO]: joint_order: {joint_order} \n")
     print(f"[INFO]: joint_ids: {joint_ids}")
 
+    # # config 에서 제공하는 damping 설정은 PD-GAIN 을 의미하는 것으로 확인
+    # print(
+    #     "[INFO]: Viscous Damping or PD gain?",
+    #     articulation.data.default_joint_viscous_friction_coeff[:, joint_ids],
+    # )
     armature = torch.tensor(
-        [0.1] * len(joint_ids), device=env.unwrapped.device
+        [0.01] * len(joint_ids), device=env.unwrapped.device
     ).unsqueeze(0)
     damping = torch.tensor(
-        [4.5] * len(joint_ids), device=env.unwrapped.device
+        [3.0] * len(joint_ids), device=env.unwrapped.device
     ).unsqueeze(0)
     friction = torch.tensor(
         [0.05] * len(joint_ids), device=env.unwrapped.device
     ).unsqueeze(0)
 
     # joint bias (initial pose 에 영향)
-    bias = torch.tensor([0.00] * len(joint_ids), device=env.unwrapped.device).unsqueeze(
+    bias = torch.tensor([0.02] * len(joint_ids), device=env.unwrapped.device).unsqueeze(
         0
     )
     time_lag = torch.tensor([[5]], dtype=torch.int, device=env.unwrapped.device)
@@ -198,21 +203,21 @@ def main():
             0.0,
             # # 3/20 팔 제거
             # # Left arm 16-22
-            # 1.0,
-            # 1.0,
-            # 1.0,
-            # 1.0,
-            # 1.0,
-            # 1.0,
-            # 1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
             # # Right arm (roll mirrored) 23-28
-            # 1.0,
-            # -1.0,
-            # -1.0,
-            # 1.0,
-            # 1.0,
-            # 1.0,
-            # 1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
         ],
         device=env.unwrapped.device,
     )
@@ -224,39 +229,40 @@ def main():
     trajectory_bias = torch.tensor(
         tb_leftleg + tb_rightleg + tb_waist
         # # 3/20 팔 제거
-        # + tb_leftarm + tb_rightarm
-        ,
+        + tb_leftarm + tb_rightarm,
         device=env.unwrapped.device,
     )
     enabled_groups = args_cli.joints
     # Per-group trajectory scales (non-zero = excited)
     scale_left_leg = (
-        [0.3, 0.15, 0.2, 0.4, 0.15, 0.1] if "left_leg" in enabled_groups else [0.0] * 6
+        [0.35, 0.05, 0.3, 0.3, 0.15, -0.1]
+        if "left_leg" in enabled_groups
+        else [0.0] * 6
     )
     scale_right_leg = (
-        [0.3, 0.15, 0.2, 0.4, 0.15, 0.1] if "right_leg" in enabled_groups else [0.0] * 6
+        [0.35, 0.05, 0.3, 0.3, 0.15, -0.1]
+        if "right_leg" in enabled_groups
+        else [0.0] * 6
     )
     scale_waist = [0.3, 0.2, 0.3] if "waist" in enabled_groups else [0.0] * 3
     scale_left_arm = (
-        [0.8, 0.1, 0.5, 0.5, 0.15, 0.1, 0.1]
+        [0.5, 0.1, 0.1, 0.5, 0.15, 0.1, 0.1]
         if "left_arm" in enabled_groups
         else [0.0] * 7
     )
     scale_right_arm = (
-        [0.8, 0.1, 0.5, 0.5, 0.15, 0.1, 0.1]
+        [0.5, 0.1, 0.1, 0.5, 0.15, 0.1, 0.1]
         if "right_arm" in enabled_groups
         else [0.0] * 7
     )
     trajectory_scale = torch.tensor(
         scale_left_leg + scale_right_leg + scale_waist
         # # 3/20 팔 제거
-        # + scale_left_arm
-        # + scale_right_arm
-        ,
+        + scale_left_arm + scale_right_arm,
         device=env.unwrapped.device,
     )
     # Mask for which joints are active (scale > 0) — used to filter saved data
-    active_mask = trajectory_scale > 0
+    active_mask = trajectory_scale != 0
     active_indices = torch.where(active_mask)[0]
     active_joint_names = [joint_order[i] for i in active_indices.tolist()]
     print(f"[INFO]: Active joint groups: {enabled_groups}")
@@ -268,11 +274,16 @@ def main():
     # trajectory_bias = torch.zeros_like(trajectory_bias)
     # trajectory_scale = torch.ones_like(trajectory_scale)
 
+    # # bias (초기위치) 반영을 위해서 스케일을 먼저 곱하도록 수정
+    # trajectory[:, :] = (
+    #     (trajectory[:, :] + trajectory_bias.unsqueeze(0))
+    #     * trajectory_directions.unsqueeze(0)
+    #     * trajectory_scale.unsqueeze(0)
+    # )
     trajectory[:, :] = (
-        (trajectory[:, :] + trajectory_bias.unsqueeze(0))
-        * trajectory_directions.unsqueeze(0)
-        * trajectory_scale.unsqueeze(0)
-    )
+        trajectory[:, :] * trajectory_scale.unsqueeze(0) + trajectory_bias.unsqueeze(0)
+    ) * trajectory_directions.unsqueeze(0)
+
     init_pos = torch.zeros((1, articulation.num_joints), device=env.unwrapped.device)
     # joint ids 순서대로 init_pose 삽입 + joint bias
     init_pos[0, joint_ids] = trajectory[0, :] + bias[0]
@@ -280,7 +291,6 @@ def main():
     articulation.write_joint_velocity_to_sim(
         torch.zeros((1, articulation.num_joints), device=env.unwrapped.device)
     )
-
     counter = 0
     # simulate environment
     dof_pos_buffer = torch.zeros(num_steps, len(joint_ids), device=env.unwrapped.device)
@@ -288,6 +298,8 @@ def main():
         num_steps, len(joint_ids), device=env.unwrapped.device
     )
     time_data = t
+
+    torch.save(articulation.root_physx_view.get_inertias(), data_dir / "inertia")
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():

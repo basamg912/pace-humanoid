@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools", "wheel", "toml"]
+build-backend = "setuptools.build_meta"
+
+
+[package]
+title="G1 PPO"
+version="0.0.1"
+maintainer="Tkdyun"
+description="Train policy using dynamics parameter estimated for G1"
+category="RL"
+
+[dependencies]
+"isaac"={}
+
+[[python.module]]
+name="policy_train"

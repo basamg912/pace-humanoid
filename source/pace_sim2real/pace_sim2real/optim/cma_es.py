@@ -116,11 +116,12 @@ class CMAESOptimizer:
 
     def evolve(self):
         if self.nominal_params is not None and self.reg_weight > 0:
-            reg_idx = slice(0, 3 * len(self.joint_order))  # armature, damping, friction
+            # armature만 regularization (ground truth: Unitree 제공 값)
+            # viscous friction, Coulomb friction은 nominal 없으므로 제외
             reg_loss = self.reg_weight * torch.sum(
                 torch.square(
-                    self.sim_params[:, reg_idx]
-                    - self.nominal_params[reg_idx].unsqueeze(0)
+                    self.sim_params[:, self.armature_idx]
+                    - self.nominal_params[self.armature_idx].unsqueeze(0)
                 ),
                 dim=1,
             )

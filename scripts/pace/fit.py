@@ -99,27 +99,15 @@ def main():
     bounds_params = bounds_params[param_indices, :]
 
     env.reset()
-    nominal_armature = articulation.data.default_joint_armature[
-        0, data_joint_ids
-    ]  # articulation = env.unwrapped.scene["robot"]
-    nominal_damping = articulation.data.default_joint_damping[0, data_joint_ids]
-    nominal_friction = articulation.data.default_joint_friction[0, data_joint_ids]
-    nominal_bias = articulation.data.default_joint_bias[0, data_joint_ids]
-    nominal_delay = articulation.data.default_joint_delay[0]
-    nominal_params = torch.cat(
-        [
-            nominal_armature,
-            nominal_damping,
-            nominal_friction,
-            nominal_bias,
-            nominal_delay,
-        ]
-    )
+
+    # Regularization: armature만 ground truth 존재 (Unitree 제공)
+    nominal_armature = articulation.data.default_joint_armature[0, data_joint_ids]
+    num_data_joints = len(data_joint_names)
+    # nominal_params를 sim_params와 같은 layout으로 구성 (armature + damping + friction + bias + delay)
+    # armature만 실제 값, 나머지는 0 (regularization에서 사용하지 않음)
+    nominal_params = torch.zeros(4 * num_data_joints + 1, device=env.unwrapped.device)
+    nominal_params[:num_data_joints] = nominal_armature
     print(f"[INFO]: Nominal Armature: {nominal_armature}")
-    print(f"[INFO]: Nominal Damping: {nominal_damping}")
-    print(f"[INFO]: Nominal Friction: {nominal_friction}")
-    print(f"[INFO]: Nominal Bias: {nominal_bias}")
-    print(f"[INFO]: Nominal Delay: {nominal_delay}")
     print(f"[INFO]: Data joint IDs (sim): {data_joint_ids}")
 
     initial_dof_pos = (
@@ -142,7 +130,7 @@ def main():
         save_interval=env_cfg.sim2real.cmaes.save_interval,
         save_optimization_process=env_cfg.sim2real.cmaes.save_optimization_process,
         nominal_params=nominal_params,
-        nominal_weight=0.01,
+        reg_weight=0.01,
     )
 
     env.reset()

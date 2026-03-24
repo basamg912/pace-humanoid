@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policy_train"
+version = "0.0.1"
+description = "Train policy using dynamics parameter estimated for G1"
+authors = [{ name = "Tkdyun" }]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["src"]
