@@ -30,7 +30,7 @@ parser.add_argument(
 parser.add_argument(
     "--max_frequency",
     type=float,
-    default=10.0,
+    default=2.0,
     help="Maximum frequency for the chirp signal in Hz.",
 )
 parser.add_argument(
@@ -46,7 +46,7 @@ parser.add_argument(
     "--joints",
     type=str,
     nargs="+",
-    default=["left_leg", "right_leg", "left_arm", "right_arm"],
+    default=["left_leg", "right_leg"],
     choices=["left_leg", "right_leg", "waist", "left_arm", "right_arm"],
     help="Joint groups to excite and collect data for.",
 )
@@ -203,21 +203,21 @@ def main():
             0.0,
             # # 3/20 팔 제거
             # # Left arm 16-22
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            # # Right arm (roll mirrored) 23-28
-            1.0,
-            -1.0,
-            -1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # # # Right arm (roll mirrored) 23-28
+            # 1.0,
+            # -1.0,
+            # -1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
+            # 1.0,
         ],
         device=env.unwrapped.device,
     )
@@ -227,24 +227,22 @@ def main():
     tb_leftarm = [0.3, 0.25, 0.0, 0.97, 0.15, 0.0, 0.0]
     tb_rightarm = [0.3, 0.25, 0.0, 0.97, 0.15, 0.0, 0.0]
     trajectory_bias = torch.tensor(
-        tb_leftleg + tb_rightleg + tb_waist
+        tb_leftleg + tb_rightleg + tb_waist,
         # # 3/20 팔 제거
-        + tb_leftarm + tb_rightarm,
+        # + tb_leftarm + tb_rightarm,
         device=env.unwrapped.device,
     )
     enabled_groups = args_cli.joints
     # Per-group trajectory scales (non-zero = excited)
     scale_left_leg = (
-        [0.35, 0.05, 0.3, 0.3, 0.15, -0.1]
-        if "left_leg" in enabled_groups
-        else [0.0] * 6
+        [0.2, 0.05, 0.2, 0.2, 0.15, -0.1] if "left_leg" in enabled_groups else [0.0] * 6
     )
     scale_right_leg = (
-        [0.35, 0.05, 0.3, 0.3, 0.15, -0.1]
+        [0.2, 0.05, 0.2, 0.2, 0.15, -0.1]
         if "right_leg" in enabled_groups
         else [0.0] * 6
     )
-    scale_waist = [0.3, 0.2, 0.3] if "waist" in enabled_groups else [0.0] * 3
+    scale_waist = [0.2, 0.2, 0.2] if "waist" in enabled_groups else [0.0] * 3
     scale_left_arm = (
         [0.5, 0.1, 0.1, 0.5, 0.15, 0.1, 0.1]
         if "left_arm" in enabled_groups
@@ -256,9 +254,9 @@ def main():
         else [0.0] * 7
     )
     trajectory_scale = torch.tensor(
-        scale_left_leg + scale_right_leg + scale_waist
+        scale_left_leg + scale_right_leg + scale_waist,
         # # 3/20 팔 제거
-        + scale_left_arm + scale_right_arm,
+        # + scale_left_arm + scale_right_arm,
         device=env.unwrapped.device,
     )
     # Mask for which joints are active (scale > 0) — used to filter saved data
