@@ -7,6 +7,8 @@
 
 """Launch Isaac Sim Simulator first."""
 
+# python scripts/rsl_rl/train.py --task Isaac-G1-LowLevel-v0 --num_envs 4096 --headless
+
 import argparse
 import sys
 
@@ -141,6 +143,7 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import pace_sim2real.tasks  # noqa: F401
+from policy_train.config.g1_param_set import g1_set_joint_params
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -209,7 +212,9 @@ def main(
     env = gym.make(
         args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None
     )
-
+    print("[INFO] Joint 파라미터 초기화")
+    articulation = env.unwrapped.scene["robot"]
+    g1_set_joint_params(articulation, env.unwrapped.num_envs, env.unwrapped.device)
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
@@ -217,7 +222,7 @@ def main(
     # save resume path before creating a new log_dir
     if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         resume_path = get_checkpoint_path(
-            log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+            log_root_path, args_cli.load_run, args_cli.load_checkpoint
         )
 
     # wrap for video recording

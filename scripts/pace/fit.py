@@ -130,7 +130,7 @@ def main():
         save_interval=env_cfg.sim2real.cmaes.save_interval,
         save_optimization_process=env_cfg.sim2real.cmaes.save_optimization_process,
         nominal_params=nominal_params,
-        reg_weight=0.01,
+        # reg_weight=0.01,
     )
 
     env.reset()
@@ -150,7 +150,9 @@ def main():
                 .unsqueeze(0)
                 .repeat(env.unwrapped.num_envs, 1),
             )
-            actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
+            # Initialize actions with current joint positions to keep un-fitted joints
+            # (e.g. waist) at their current position and avoid unwanted oscillation.
+            actions = env.unwrapped.scene.articulations["robot"].data.joint_pos.clone()
             actions[:, data_joint_ids] = (
                 target_dof_pos[counter, :]
                 .unsqueeze(0)

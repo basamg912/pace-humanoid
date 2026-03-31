@@ -18,23 +18,45 @@ import cli_args  # isort: skip
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
+    "--video", action="store_true", default=False, help="Record videos during training."
 )
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument(
+    "--video_length",
+    type=int,
+    default=200,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--disable_fabric",
+    action="store_true",
+    default=False,
+    help="Disable fabric and use USD I/O operations.",
+)
+parser.add_argument(
+    "--num_envs", type=int, default=None, help="Number of environments to simulate."
+)
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
-    "--agent", type=str, default="rsl_rl_cfg_entry_point", help="Name of the RL agent configuration entry point."
+    "--agent",
+    type=str,
+    default="rsl_rl_cfg_entry_point",
+    help="Name of the RL agent configuration entry point.",
 )
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+parser.add_argument(
+    "--seed", type=int, default=None, help="Seed used for the environment"
+)
 parser.add_argument(
     "--use_pretrained_checkpoint",
     action="store_true",
     help="Use the pre-trained checkpoint from Nucleus.",
 )
-parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument(
+    "--real-time",
+    action="store_true",
+    default=False,
+    help="Run in real-time, if possible.",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -70,7 +92,7 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 
 from isaaclab_rl.rsl_rl import (
     RslRlBaseRunnerCfg,
@@ -88,6 +110,7 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import pace_sim2real.tasks  # noqa: F401
+from policy_train.config.g1_param_set import g1_set_joint_params
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -101,13 +124,20 @@ def main(
     train_task_name = task_name.replace("-Play", "")
 
     # override configurations with non-hydra CLI arguments
-    agent_cfg = cast(RslRlOnPolicyRunnerCfg | RslRlDistillationRunnerCfg, cli_args.update_rsl_rl_cfg(agent_cfg, args_cli))
-    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    agent_cfg = cast(
+        RslRlOnPolicyRunnerCfg | RslRlDistillationRunnerCfg,
+        cli_args.update_rsl_rl_cfg(agent_cfg, args_cli),
+    )
+    env_cfg.scene.num_envs = (
+        args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    )
 
     # set the environment seed
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
-    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    env_cfg.sim.device = (
+        args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    )
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
@@ -116,12 +146,16 @@ def main(
     if args_cli.use_pretrained_checkpoint:
         resume_path = get_published_pretrained_checkpoint("rsl_rl", train_task_name)
         if not resume_path:
-            print("[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task.")
+            print(
+                "[INFO] Unfortunately a pre-trained checkpoint is currently unavailable for this task."
+            )
             return
     elif args_cli.checkpoint:
         resume_path = retrieve_file_path(args_cli.checkpoint)
     else:
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        resume_path = get_checkpoint_path(
+            log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint
+        )
 
     log_dir = os.path.dirname(resume_path)
 
@@ -129,7 +163,13 @@ def main(
     env_cfg.log_dir = log_dir
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None
+    )
+
+    print("[INFO] Joint 파라미터 초기화 (Play)")
+    articulation = env.unwrapped.scene["robot"]
+    g1_set_joint_params(articulation, env.unwrapped.num_envs, env.unwrapped.device)
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
@@ -155,9 +195,13 @@ def main(
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
     if agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, cast(Any, agent_cfg).to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = OnPolicyRunner(
+            env, cast(Any, agent_cfg).to_dict(), log_dir=None, device=agent_cfg.device
+        )
     elif agent_cfg.class_name == "DistillationRunner":
-        runner = DistillationRunner(env, cast(Any, agent_cfg).to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = DistillationRunner(
+            env, cast(Any, agent_cfg).to_dict(), log_dir=None, device=agent_cfg.device
+        )
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     runner.load(resume_path)
@@ -171,8 +215,17 @@ def main(
         # version 2.3 onwards
         policy_nn = runner.alg.policy
     except AttributeError:
-        # version 2.2 and below
-        policy_nn = getattr(runner.alg, "actor_critic")  # type: ignore[attr-defined]
+        import torch.nn as nn
+
+        class PolicyWrapper(nn.Module):
+            def __init__(self, actor):
+                super().__init__()
+                self.actor = actor
+                self.is_recurrent = getattr(actor, "is_recurrent", False)
+                if hasattr(actor, "obs_normalization"):
+                    self.actor_obs_normalizer = actor.obs_normalization
+
+        policy_nn = PolicyWrapper(getattr(runner.alg, "actor"))
 
     # extract the normalizer
     if hasattr(policy_nn, "actor_obs_normalizer"):
@@ -180,12 +233,28 @@ def main(
     elif hasattr(policy_nn, "student_obs_normalizer"):
         normalizer = policy_nn.student_obs_normalizer
     else:
-        normalizer = None
+        normalizer = policy_nn.actor.obs_normalization
 
     # export policy to onnx/jit
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
-    export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+    try:
+        export_policy_as_jit(
+            policy_nn,
+            normalizer=normalizer,
+            path=export_model_dir,
+            filename="policy.pt",
+        )
+        export_policy_as_onnx(
+            policy_nn,
+            normalizer=normalizer,
+            path=export_model_dir,
+            filename="policy.onnx",
+        )
+        print(f"[INFO] Exported policy models to: {export_model_dir}")
+    except Exception as e:
+        print(
+            f"[WARNING] 모델 Export(JIT/ONNX) 실패. RSL-RL 버전에 따라 PyTorch JIT 변환이 호환되지 않을 수 있습니다. 플레이(검증)는 계속 진행합니다.\nError: {e}"
+        )
 
     dt = env.unwrapped.step_dt
 
@@ -200,7 +269,9 @@ def main(
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
-            obs["policy"][robot_ref, 9:12] = gamepad.advance() * torch.tensor([1.0, -1.0, -1.0], device=env.unwrapped.device)
+            obs["policy"][robot_ref, 9:12] = gamepad.advance() * torch.tensor(
+                [1.0, -1.0, -1.0], device=env.unwrapped.device
+            )
             actions = policy(obs)
             # env stepping
             obs, _, _, _ = env.step(actions)
@@ -209,6 +280,26 @@ def main(
             # Exit the play loop after recording one video
             if timestep == args_cli.video_length:
                 break
+
+        # ! rsl_rl 패키지 on_policy_runner.py 에 작성
+        # # sensor force 측정
+        # contact_sensor = env.unwrapped.scene["contact_sensor"]
+        # forces = contact_sensor.data.net_forces_w
+        # force_mag = torch.norm(forces, dim=-1)
+
+        # # pelvis, torso의 실제 인덱스 확인
+        # body_names = contact_sensor.body_names
+        # print(f"[INFO Body names] {body_names}")
+
+        # print(f"pelvis idx: {pelvis_idx}")  # 0번 이어야 함
+        # print(f"torso idx: {torso_idx}")  # 15번 이어야 함
+
+        # # 해당 인덱스의 force만 출력
+        # forces = contact_sensor.data.net_forces_w_history
+        # print(f"pelvis force: {torch.norm(forces[:, :, pelvis_idx], dim=-1)}")
+        # print(f"torso force:  {torch.norm(forces[:, :, torso_idx], dim=-1)}")
+        # print(contact_sensor.body_names)
+        # print(f"[INFO] Force magnitude: {force_mag}")
 
         # time delay for real-time evaluation
         sleep_time = dt - (time.time() - start_time)

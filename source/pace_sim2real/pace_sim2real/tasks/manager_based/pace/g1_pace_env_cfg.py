@@ -6,6 +6,7 @@ from pace_sim2real import PaceSim2realEnvCfg, PaceSim2realSceneCfg, PaceCfg
 from pace_sim2real.tasks.manager_based.pace.G1_CFG import (
     UNITREE_G1_29DOF_CFG,
     G1_15DOF_CFG,
+    G1_12DOF_CFG,
 )
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils import configclass
@@ -18,20 +19,24 @@ UNITREE_ROS_DIR = "/home/kist/work/workspace/unitree_rl_lab/unitree_ros"  # Repl
 # n7520-14.3
 # 2 + 2 + 1 = 5
 G1_PACE_ACTUATOR1_CFG = PaceDCMotorCfg(
-    joint_names_expr=[".*_hip_pitch_.*", ".*_hip_yaw_.*", "waist_yaw_joint"],
+    joint_names_expr=[
+        ".*_hip_pitch_.*",
+        ".*_hip_yaw_.*",
+        # "waist_yaw_joint"
+    ],
     effort_limit=88,
     velocity_limit=32.0,
     stiffness={
         ".*_hip_.*": 100.0,
-        "waist_yaw_joint": 200.0,
+        # "waist_yaw_joint": 200.0,
     },
     damping={
         ".*_hip_.*": 2.0,
-        "waist_yaw_joint": 5.0,
+        # "waist_yaw_joint": 5.0,
     },
     armature=0.01,
     saturation_effort=120,
-    encoder_bias=[0.0] * 5,
+    encoder_bias=[0.0] * 4,
     max_delay=10,
 )
 
@@ -63,8 +68,8 @@ G1_PACE_ACTUATOR3_CFG = PaceDCMotorCfg(
         # ".*_elbow_.*",
         # ".*_wrist_roll.*",
         ".*_ankle_.*",
-        "waist_roll_joint",
-        "waist_pitch_joint",
+        # "waist_roll_joint",
+        # "waist_pitch_joint",
     ],
     effort_limit=25,
     velocity_limit=37,
@@ -75,11 +80,11 @@ G1_PACE_ACTUATOR3_CFG = PaceDCMotorCfg(
         # ".*_elbow_.*": 1.0,
         # ".*_wrist_roll.*": 1.0,
         ".*_ankle_.*": 2.0,
-        "waist_.*_joint": 5.0,
+        # "waist_.*_joint": 5.0,
     },
     armature=0.01,
     saturation_effort=30,
-    encoder_bias=[0.0] * 6,
+    encoder_bias=[0.0] * 4,
     max_delay=10,
 )
 # w4010-25
@@ -96,6 +101,10 @@ G1_PACE_ACTUATOR4_CFG = PaceDCMotorCfg(
     encoder_bias=[0.0] * 4,
     max_delay=10,
 )
+
+# NOTE: waist joints (waist_yaw, waist_roll, waist_pitch) are kept in ACTUATOR1/3
+# with their original stiffness so they hold their default position (position-hold only,
+# NOT part of CMA-ES fitting — see joint_order below).
 
 
 @configclass
@@ -167,11 +176,13 @@ class G1PaceCfg(PaceCfg):
     robot_name = "Robot"
     data_dir = "Robot/chirp_data.pt"
     bounds_params: torch.Tensor = torch.zeros(
-        # 29 x 4 + 1 = 117
-        # 양다리 + 허리 = 12+3 = 15 *4 +1 = 61
-        (61, 2)
+        # 다리 12개 관절만 CMA-ES 최적화: 12 * 4 + 1 = 49
+        # (waist 3개는 actuator 통해 위치 고정, fitting 대상 아님)
+        (49, 2)
     )
     joint_order: list[str] = [
+        # 양 다리 12개 관절만 (CMA-ES fitting 대상)
+        # waist 3개는 ACTUATOR1/3에서 stiffness로 고정되므로 여기서 제외
         "left_hip_pitch_joint",
         "left_hip_roll_joint",
         "left_hip_yaw_joint",
@@ -184,28 +195,13 @@ class G1PaceCfg(PaceCfg):
         "right_knee_joint",
         "right_ankle_pitch_joint",
         "right_ankle_roll_joint",
-        "waist_yaw_joint",
-        "waist_roll_joint",
-        "waist_pitch_joint",
-        # # 3/20 팔 제거
-        # "left_shoulder_pitch_joint",
-        # "left_shoulder_roll_joint",
-        # "left_shoulder_yaw_joint",
-        # "left_elbow_joint",
-        # "left_wrist_roll_joint",
-        # "left_wrist_pitch_joint",
-        # "left_wrist_yaw_joint",
-        # "right_shoulder_pitch_joint",
-        # "right_shoulder_roll_joint",
-        # "right_shoulder_yaw_joint",
-        # "right_elbow_joint",
-        # "right_wrist_roll_joint",
-        # "right_wrist_pitch_joint",
-        # "right_wrist_yaw_joint",
+        # "waist_yaw_joint",
+        # "waist_roll_joint",
+        # "waist_pitch_joint",
     ]
 
     def __post_init__(self):
-        n = len(self.joint_order)
+        n = 12
         # set bounds for parameters
         self.bounds_params[:n, 0] = 1e-5
         self.bounds_params[:n, 1] = 1.0  # armature between 1e-5 - 1.0 [kgm2]
@@ -220,7 +216,8 @@ class G1PaceCfg(PaceCfg):
 
 @configclass
 class G1PaceSceneCfg(PaceSim2realSceneCfg):
-    robot = G1_15DOF_CFG.replace(
+    # ! articulationcfg class
+    robot = G1_12DOF_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         init_state=ArticulationCfg.InitialStateCfg(pos=(0.0, 0.0, 1.0)),
         actuators={

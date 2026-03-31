@@ -30,7 +30,7 @@ parser.add_argument(
 parser.add_argument(
     "--max_frequency",
     type=float,
-    default=2.0,
+    default=1.0,
     help="Maximum frequency for the chirp signal in Hz.",
 )
 parser.add_argument(
@@ -46,7 +46,7 @@ parser.add_argument(
     "--joints",
     type=str,
     nargs="+",
-    default=["left_leg", "right_leg"],
+    default=["left_leg", "right_leg"],  # waist 제외 — fitting 대상 아님
     choices=["left_leg", "right_leg", "waist", "left_arm", "right_arm"],
     help="Joint groups to excite and collect data for.",
 )
@@ -198,9 +198,9 @@ def main():
             1.0,
             1.0,
             # Waist 13-15
-            0.0,
-            0.0,
-            0.0,
+            # 0.0,
+            # 0.0,
+            # 0.0,
             # # 3/20 팔 제거
             # # Left arm 16-22
             # 1.0,
@@ -227,9 +227,10 @@ def main():
     tb_leftarm = [0.3, 0.25, 0.0, 0.97, 0.15, 0.0, 0.0]
     tb_rightarm = [0.3, 0.25, 0.0, 0.97, 0.15, 0.0, 0.0]
     trajectory_bias = torch.tensor(
-        tb_leftleg + tb_rightleg + tb_waist,
-        # # 3/20 팔 제거
-        # + tb_leftarm + tb_rightarm,
+        tb_leftleg + tb_rightleg
+        # waist 제외 — fitting 대상 아님
+        # + tb_waist
+        ,
         device=env.unwrapped.device,
     )
     enabled_groups = args_cli.joints
@@ -254,9 +255,10 @@ def main():
         else [0.0] * 7
     )
     trajectory_scale = torch.tensor(
-        scale_left_leg + scale_right_leg + scale_waist,
-        # # 3/20 팔 제거
-        # + scale_left_arm + scale_right_arm,
+        scale_left_leg + scale_right_leg
+        # waist 제외 — fitting 대상 아님
+        # + scale_waist
+        ,
         device=env.unwrapped.device,
     )
     # Mask for which joints are active (scale > 0) — used to filter saved data

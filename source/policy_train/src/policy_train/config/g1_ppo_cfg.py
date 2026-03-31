@@ -10,12 +10,12 @@ from isaaclab_rl.rsl_rl import (
 @configclass
 class G1PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 1500
+    max_iterations = 100000
     save_interval = 100
     experiment_name = "g1_locomotion"
     actor = RslRlMLPModelCfg(
         class_name="MLPModel",
-        hidden_dims=[256, 256, 128],
+        hidden_dims=[512, 256, 128],
         activation="elu",
         obs_normalization=True,
         distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(
@@ -24,7 +24,7 @@ class G1PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
     critic = RslRlMLPModelCfg(  # class Name 기본값 : MLPModel
         class_name="MLPModel",
-        hidden_dims=[256, 256, 128],
+        hidden_dims=[512, 256, 128],
         activation="elu",
         obs_normalization=True,
     )
@@ -32,10 +32,10 @@ class G1PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.01,
+        entropy_coef=0.005,
         num_learning_epochs=5,
         num_mini_batches=4,
-        learning_rate=1.0e-3,
+        learning_rate=1.0e-3,  # og : 1.0 e-3
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,
